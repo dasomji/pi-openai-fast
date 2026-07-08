@@ -1,0 +1,19 @@
+{
+  "packages": [
+    {
+      "source": "git:github.com/dasomji/pi-openai-fast",
+      "extensions": [],
+      "skills": [],
+      "prompts": [],
+      "themes": []
+    },
+    {
+      "source": "npm:@wienerberliner/pi-openai-fast",
+      "extensions": [],
+      "skills": [],
+      "prompts": [],
+      "themes": []
+    },
+    ".."
+  ]
+}
