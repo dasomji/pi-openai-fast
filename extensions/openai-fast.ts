@@ -9,9 +9,15 @@ export const FAST_STATUS_TEXT = "Fast";
 export const FAST_SERVICE_TIER = "priority";
 
 export const SUPPORTED_MODEL_KEYS = new Set([
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-luna",
   "openai/gpt-5.5",
   "openai/gpt-5.4",
   "openai/gpt-5.4-mini",
+  "openai-codex/gpt-5.6-sol",
+  "openai-codex/gpt-5.6-terra",
+  "openai-codex/gpt-5.6-luna",
   "openai-codex/gpt-5.5",
   "openai-codex/gpt-5.4",
   "openai-codex/gpt-5.4-mini",
