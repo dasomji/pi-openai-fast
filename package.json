@@ -1,6 +1,6 @@
 {
   "name": "@wienerberliner/pi-openai-fast",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Minimal Pi extension for OpenAI Fast mode.",
   "license": "MIT",
   "type": "module",
