@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import openaiFastExtension, {
   FAST_SERVICE_TIER,
   FAST_STATUS_KEY,
@@ -52,40 +55,94 @@ assert.equal(parseFastCommand("disable"), "off");
 assert.equal(parseFastCommand("status"), "status");
 assert.equal(parseFastCommand("wat"), undefined);
 
-const handlers = new Map();
-const commands = new Map();
-openaiFastExtension({
-  on(eventName, handler) {
-    handlers.set(eventName, handler);
-  },
-  registerCommand(name, command) {
-    commands.set(name, command);
-  },
-});
-
-const statuses = [];
-const notifications = [];
-const ctx = {
-  model: currentModel,
-  ui: {
-    setStatus(key, value) {
-      statuses.push([key, value]);
+async function registerExtension() {
+  const handlers = new Map();
+  const commands = new Map();
+  await openaiFastExtension({
+    on(eventName, handler) {
+      handlers.set(eventName, handler);
     },
-    notify(message, level) {
-      notifications.push([message, level]);
+    registerCommand(name, command) {
+      commands.set(name, command);
     },
-  },
-};
+  });
+  return { handlers, commands };
+}
 
-await commands.get("fast").handler("on", ctx);
-assert.deepEqual(statuses.at(-1), [FAST_STATUS_KEY, FAST_STATUS_TEXT]);
-assert.deepEqual(notifications.at(-1), ["OpenAI Fast mode is on.", "info"]);
-assert.deepEqual(
-  handlers.get("before_provider_request")(
-    { payload: { model: "gpt-5.6-sol", input: [] } },
-    ctx,
-  ),
-  { model: "gpt-5.6-sol", input: [], service_tier: FAST_SERVICE_TIER },
-);
+function createContext() {
+  const statuses = [];
+  const notifications = [];
+  return {
+    statuses,
+    notifications,
+    ctx: {
+      model: currentModel,
+      ui: {
+        setStatus(key, value) {
+          statuses.push([key, value]);
+        },
+        notify(message, level) {
+          notifications.push([message, level]);
+        },
+      },
+    },
+  };
+}
+
+const stateDir = mkdtempSync(join(tmpdir(), "pi-openai-fast-test-"));
+const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+process.env.PI_CODING_AGENT_DIR = stateDir;
+
+try {
+  const first = await registerExtension();
+  const firstContext = createContext();
+  await first.commands.get("fast").handler("on", firstContext.ctx);
+  assert.deepEqual(firstContext.statuses.at(-1), [FAST_STATUS_KEY, FAST_STATUS_TEXT]);
+  assert.deepEqual(firstContext.notifications.at(-1), ["OpenAI Fast mode is on.", "info"]);
+  assert.deepEqual(
+    first.handlers.get("before_provider_request")(
+      { payload: { model: "gpt-5.6-sol", input: [] } },
+      firstContext.ctx,
+    ),
+    { model: "gpt-5.6-sol", input: [], service_tier: FAST_SERVICE_TIER },
+  );
+
+  const reloaded = await registerExtension();
+  const reloadedContext = createContext();
+  reloaded.handlers.get("session_start")({}, reloadedContext.ctx);
+  assert.deepEqual(
+    reloadedContext.statuses.at(-1),
+    [FAST_STATUS_KEY, FAST_STATUS_TEXT],
+    "a new extension instance should restore the last Fast-mode setting",
+  );
+  assert.deepEqual(
+    reloaded.handlers.get("before_provider_request")(
+      { payload: { model: "gpt-5.6-sol", input: [] } },
+      reloadedContext.ctx,
+    ),
+    { model: "gpt-5.6-sol", input: [], service_tier: FAST_SERVICE_TIER },
+  );
+
+  await reloaded.commands.get("fast").handler("off", reloadedContext.ctx);
+  const disabled = await registerExtension();
+  const disabledContext = createContext();
+  disabled.handlers.get("session_start")({}, disabledContext.ctx);
+  assert.deepEqual(
+    disabledContext.statuses.at(-1),
+    [FAST_STATUS_KEY, undefined],
+    "turning Fast mode off should also persist across extension instances",
+  );
+  assert.equal(
+    disabled.handlers.get("before_provider_request")(
+      { payload: { model: "gpt-5.6-sol", input: [] } },
+      disabledContext.ctx,
+    ),
+    undefined,
+  );
+} finally {
+  if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+  else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+  rmSync(stateDir, { recursive: true, force: true });
+}
 
 console.log("openai-fast tests passed");

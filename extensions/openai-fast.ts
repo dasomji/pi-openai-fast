@@ -1,12 +1,16 @@
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-  ExtensionContext,
+import {
+  getAgentDir,
+  type ExtensionAPI,
+  type ExtensionCommandContext,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 export const FAST_STATUS_KEY = "pi-fast-mode";
 export const FAST_STATUS_TEXT = "Fast";
 export const FAST_SERVICE_TIER = "priority";
+export const FAST_STATE_FILENAME = "openai-fast.json";
 
 export const SUPPORTED_MODEL_KEYS = new Set([
   "openai/gpt-5.6-sol",
@@ -64,6 +68,35 @@ export function withFastServiceTier(payload: RequestPayload): RequestPayload {
   return { ...payload, service_tier: FAST_SERVICE_TIER };
 }
 
+export function fastStatePath(): string {
+  return join(getAgentDir(), FAST_STATE_FILENAME);
+}
+
+export async function loadFastMode(path = fastStatePath()): Promise<boolean> {
+  try {
+    const state: unknown = JSON.parse(await readFile(path, "utf8"));
+    return isRecord(state) && state.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function saveFastMode(enabled: boolean, path = fastStatePath()): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify({ enabled }, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export function parseFastCommand(args: string): FastCommand | undefined {
   const value = args.trim().toLowerCase();
   if (value === "") return "toggle";
@@ -87,8 +120,8 @@ function updateStatus(ctx: ExtensionContext | ExtensionCommandContext, enabled: 
   );
 }
 
-export default function openaiFastExtension(pi: ExtensionAPI) {
-  let enabled = false;
+export default async function openaiFastExtension(pi: ExtensionAPI) {
+  let enabled = await loadFastMode();
 
   pi.on("session_start", (_event, ctx) => {
     updateStatus(ctx, enabled);
@@ -119,6 +152,16 @@ export default function openaiFastExtension(pi: ExtensionAPI) {
       if (command === "toggle") enabled = !enabled;
 
       updateStatus(ctx, enabled);
+
+      if (command !== "status") {
+        try {
+          await saveFastMode(enabled);
+        } catch {
+          ctx.ui.notify(`${statusLine(enabled, ctx.model)} The setting could not be saved.`, "warning");
+          return;
+        }
+      }
+
       ctx.ui.notify(statusLine(enabled, ctx.model), "info");
     },
   });
