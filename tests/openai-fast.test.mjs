@@ -10,7 +10,7 @@ import openaiFastExtension, {
   parseFastCommand,
   shouldApplyFastMode,
   withFastServiceTier,
-} from "/tmp/pi-openai-fast-test/extensions/openai-fast.js";
+} from "../.test-dist/extensions/openai-fast.js";
 
 const supported = { provider: "openai-codex", id: "gpt-5.5" };
 const currentModel = { provider: "openai-codex", id: "gpt-5.6-sol" };

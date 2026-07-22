@@ -31,7 +31,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "rm -rf /tmp/pi-openai-fast-test && tsc --outDir /tmp/pi-openai-fast-test && node tests/openai-fast.test.mjs"
+    "test": "rm -rf .test-dist && tsc --outDir .test-dist && node tests/openai-fast.test.mjs"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
